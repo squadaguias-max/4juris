@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/templates",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/templates-lp",
+      "destination": "/index.html"
+    }
+  ]
+}
