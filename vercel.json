@@ -7,6 +7,14 @@
     {
       "source": "/templates-lp",
       "destination": "/index.html"
+    },
+    {
+      "source": "/templates-equipe",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/formulario-landing-page",
+      "destination": "/index.html"
     }
   ]
 }

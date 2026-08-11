@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { ArrowUpRight } from 'lucide-react'
+import LazyTemplateFrame from './LazyTemplateFrame'
 
-export default function TemplateCard({ template, onPreview }) {
+export default function TemplateCard({ template, onPreview, priority = false }) {
   const [loaded, setLoaded] = useState(false)
-  const url = `/templates/template-${template.id}/index.html`
   return <article className="card">
     <div className={`visual ${loaded ? 'is-loaded' : 'is-loading'}`}>
       <div className="template-loading" aria-hidden="true"><span /><strong>Carregando preview</strong></div>
-      <iframe src={url} loading="eager" onLoad={() => setLoaded(true)} tabIndex="-1" title={`Miniatura do ${template.name}`} />
+      <LazyTemplateFrame template={template} priority={priority} onLoad={() => setLoaded(true)} title={`Miniatura do ${template.name}`} />
       <div className="visual-shade" /><span className="visual-number">0{template.id}</span><button className="visual-open" type="button" onClick={() => onPreview(template)} aria-label={`Explorar o template ${template.name}`}>Explorar <ArrowUpRight size={14} /></button>
     </div>
     <div className="card-body">

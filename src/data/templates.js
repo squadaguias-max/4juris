@@ -11,4 +11,7 @@ export const templates = [
   { id: 10, name: 'Vértice Família', direction: 'Clássico, monocromático e acolhedor', purpose: 'Especialistas em Direito de Família e Sucessões com posicionamento tradicional', version: '1.0.0', features: ['Família', 'Sucessões', 'Perfil', 'Contato'] },
   { id: 11, name: 'Método Jurídico 360', direction: 'Conversão, conteúdo e alto valor percebido', purpose: 'Advogados que vendem diagnóstico, consultoria ou programa jurídico preventivo', version: '1.0.0', features: ['Diagnóstico', 'Benefícios', 'Método', 'Aplicação'] },
   { id: 12, name: 'Alerta Criminal', direction: 'Urgente, direto e especializado', purpose: 'Advocacia criminal com plantão, resposta rápida e foco em contato imediato', version: '1.0.0', features: ['Plantão 24h', 'Urgências', 'Processo', 'WhatsApp'] },
+  { id: 13, name: 'Flora Legal', direction: 'Orgânico, editorial e contemporâneo', purpose: 'Escritórios empresariais que buscam leveza, inovação e proximidade', version: '1.0.0', features: ['Empresarial', 'Áreas', 'Método', 'WhatsApp'] },
+  { id: 14, name: 'Orbe Advocacia', direction: 'Premium, modular e de alto contraste', purpose: 'Boutiques empresariais, digitais e escritórios orientados a negócios', version: '1.0.0', features: ['Soluções', 'Impacto', 'Processo', 'Contato'] },
+  { id: 15, name: 'Alva Real Estate Law', direction: 'Arquitetônico, sofisticado e editorial', purpose: 'Especialistas em Direito Imobiliário, incorporações e patrimônio', version: '1.0.0', features: ['Imobiliário', 'Soluções', 'Método', 'WhatsApp'] },
 ]
