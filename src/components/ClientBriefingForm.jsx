@@ -1,29 +1,71 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, Check, ChevronDown, Copy, ExternalLink, RotateCcw, Save, Send } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Check, ChevronDown, Copy, ExternalLink, RotateCcw, Save, Send, Trash2, UserPlus } from 'lucide-react'
 import Brand from './Brand'
 import LazyTemplateFrame from './LazyTemplateFrame'
 import { templates } from '../data/templates'
 
 const STORAGE_KEY = '4juris-client-briefing-draft-v1'
+const BRAZILIAN_STATES = [
+  ['AC', 'Acre'], ['AL', 'Alagoas'], ['AP', 'Amapá'], ['AM', 'Amazonas'], ['BA', 'Bahia'], ['CE', 'Ceará'], ['DF', 'Distrito Federal'],
+  ['ES', 'Espírito Santo'], ['GO', 'Goiás'], ['MA', 'Maranhão'], ['MT', 'Mato Grosso'], ['MS', 'Mato Grosso do Sul'], ['MG', 'Minas Gerais'],
+  ['PA', 'Pará'], ['PB', 'Paraíba'], ['PR', 'Paraná'], ['PE', 'Pernambuco'], ['PI', 'Piauí'], ['RJ', 'Rio de Janeiro'], ['RN', 'Rio Grande do Norte'],
+  ['RS', 'Rio Grande do Sul'], ['RO', 'Rondônia'], ['RR', 'Roraima'], ['SC', 'Santa Catarina'], ['SP', 'São Paulo'], ['SE', 'Sergipe'], ['TO', 'Tocantins'],
+]
+const STATE_CODES = new Set(BRAZILIAN_STATES.map(([code]) => code))
+
+const formatPhone = value => {
+  let digits = value.replace(/\D/g, '')
+  if (digits.length > 11 && digits.startsWith('55')) digits = digits.slice(2)
+  digits = digits.slice(0, 11)
+  if (!digits) return ''
+  if (digits.length < 3) return `(${digits}`
+  const areaCode = digits.slice(0, 2)
+  const number = digits.slice(2)
+  if (number.length <= 4) return `(${areaCode}) ${number}`
+  const splitAt = number.length > 8 ? 5 : 4
+  return `(${areaCode}) ${number.slice(0, splitAt)}-${number.slice(splitAt)}`
+}
+
+const formatOabNumber = value => {
+  const normalized = value.toUpperCase().replace(/[^0-9A-Z]/g, '')
+  const digits = (normalized.match(/^\d+/)?.[0] || '').slice(0, 7)
+  const suffix = normalized.slice(digits.length).replace(/[^A-Z]/g, '').slice(0, 2)
+  const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return suffix ? `${formatted}-${suffix}` : formatted
+}
+
+const formatDomain = value => value.toLowerCase().replace(/\s/g, '').replace(/^https?:\/\//, '').replace(/\/+$/, '')
 
 const initialForm = {
-  projectName: '', legalArea: '', objective: '', audience: '', highlight: '', action: '', actionOther: '', cta: '', template: '',
-  professionalName: '', officeName: '', oab: '', city: '', biography: '', mainService: '', mainServiceDescription: '', additionalServices: '',
-  whatsapp: '', whatsappMessage: '', email: '', phone: '', social: '', regions: '', attendance: '', address: '', hours: '',
-  primaryColor: '', secondaryColor: '', appearance: '', tone: '', brandWords: '', materials: '', faqs: '', situations: '', team: '',
-  additionalRequests: '', testimonials: '', hasDomain: '', domain: '', domainPlatform: '', domainLogin: '', domainAccess: '',
-  hasHosting: '', hostingPlatform: '', hostingLogin: '', hostingAccess: '', contactForm: '', integrations: '',
+  template: '', professionalName: '', officeName: '', oab: '', additionalLawyers: [], city: '', state: '', biography: '',
+  whatsapp: '', email: '', phone: '', social: '', regions: '', attendance: '', address: '', hours: '',
+  primaryColor: '', secondaryColor: '', appearance: '', faqs: '', situations: '', team: '', additionalRequests: '', testimonials: '',
+  hasDomain: '', domain: '', domainPlatform: '', domainLogin: '', domainPassword: '',
+  hasHosting: '', hostingPlatform: '', hostingLogin: '', hostingPassword: '', integrations: '',
 }
 
 const show = value => value?.trim() || 'Não informado'
 const requiredLabels = {
-  projectName: 'Nome do projeto ou escritório', legalArea: 'Área jurídica principal', objective: 'Objetivo principal da página', audience: 'Público desejado', highlight: 'Serviço em destaque', action: 'Ação esperada do visitante', actionOther: 'Descrição da outra ação', template: 'Template escolhido', professionalName: 'Nome do responsável', oab: 'Número da OAB', city: 'Cidade e estado', mainService: 'Serviço principal', mainServiceDescription: 'Descrição do serviço', whatsapp: 'WhatsApp', regions: 'Cidades ou regiões atendidas', attendance: 'Formato de atendimento', primaryColor: 'Cor principal', hasDomain: 'Informar se já possui domínio', domain: 'Endereço do domínio', domainPlatform: 'Plataforma do domínio', domainLogin: 'Login ou e-mail do domínio', hasHosting: 'Informar se já possui hospedagem', hostingPlatform: 'Plataforma de hospedagem', hostingLogin: 'Login ou e-mail da hospedagem',
+  template: 'Template escolhido', professionalName: 'Nome do responsável', oab: 'Número da OAB', city: 'Cidade', state: 'Estado', whatsapp: 'WhatsApp', regions: 'Cidades ou regiões atendidas', attendance: 'Formato de atendimento', primaryColor: 'Cor principal', hasDomain: 'Informar se já possui domínio', domain: 'Endereço do domínio', domainPlatform: 'Plataforma do domínio', domainLogin: 'Login ou e-mail do domínio', hasHosting: 'Informar se já possui hospedagem', hostingPlatform: 'Plataforma de hospedagem', hostingLogin: 'Login ou e-mail da hospedagem',
 }
 
 function loadSavedForm() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY))
-    return saved && typeof saved === 'object' ? { ...initialForm, ...saved } : initialForm
+    if (!saved || typeof saved !== 'object') return initialForm
+    const migrated = { ...initialForm, ...saved, additionalLawyers: Array.isArray(saved.additionalLawyers) ? saved.additionalLawyers : [] }
+    const cityState = migrated.city.match(/^(.*?)\s*(?:-|\/)\s*([A-Z]{2})$/i)
+    if (!migrated.state && cityState && STATE_CODES.has(cityState[2].toUpperCase())) {
+      migrated.city = cityState[1].trim()
+      migrated.state = cityState[2].toUpperCase()
+    }
+    const legacyOab = migrated.oab.match(/^OAB\/[A-Z]{2}\s*([\d.]+(?:-[A-Z]{1,2})?)$/i)
+    if (legacyOab) migrated.oab = formatOabNumber(legacyOab[1])
+    delete migrated.oabState
+    migrated.additionalLawyers = migrated.additionalLawyers.map(lawyer => ({ name: String(lawyer?.name || ''), oab: formatOabNumber(String(lawyer?.oab || '')) }))
+    migrated.whatsapp = formatPhone(migrated.whatsapp)
+    migrated.phone = formatPhone(migrated.phone)
+    return migrated
   } catch { return initialForm }
 }
 
@@ -32,32 +74,63 @@ export default function ClientBriefingForm() {
   const [copied, setCopied] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [saved, setSaved] = useState(false)
-  const update = event => setForm(current => ({ ...current, [event.target.name]: event.target.value }))
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const update = event => {
+    setSubmitted(false)
+    setSubmitError('')
+    setForm(current => ({ ...current, [event.target.name]: event.target.value }))
+  }
   const selectTemplate = template => {
+    setSubmitted(false)
+    setSubmitError('')
     setForm(current => ({ ...current, template: `Template ${String(template.id).padStart(2, '0')} — ${template.name}` }))
     setTemplatesOpen(false)
+  }
+  const addLawyer = () => {
+    setSubmitted(false)
+    setSubmitError('')
+    setForm(current => ({ ...current, additionalLawyers: [...current.additionalLawyers, { name: '', oab: '' }] }))
+  }
+  const updateLawyer = (index, field, value) => {
+    setSubmitted(false)
+    setSubmitError('')
+    setForm(current => ({ ...current, additionalLawyers: current.additionalLawyers.map((lawyer, lawyerIndex) => lawyerIndex === index ? { ...lawyer, [field]: value } : lawyer) }))
+  }
+  const removeLawyer = index => {
+    setSubmitted(false)
+    setSubmitError('')
+    setForm(current => ({ ...current, additionalLawyers: current.additionalLawyers.filter((_, lawyerIndex) => lawyerIndex !== index) }))
   }
 
   useEffect(() => {
     setSaved(false)
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)) } catch { /* Storage may be disabled by the browser. */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...form, domainPassword: '', hostingPassword: '' })) } catch { /* Storage may be disabled by the browser. */ }
       setSaved(true)
     }, 400)
     return () => window.clearTimeout(timer)
   }, [form])
 
   const requiredFieldNames = useMemo(() => {
-    const requiredFields = ['projectName', 'legalArea', 'objective', 'audience', 'highlight', 'action', 'template', 'professionalName', 'oab', 'city', 'mainService', 'mainServiceDescription', 'whatsapp', 'regions', 'attendance', 'primaryColor', 'hasDomain', 'hasHosting']
-    if (form.action === 'Outra') requiredFields.push('actionOther')
+    const requiredFields = ['template', 'professionalName', 'oab', 'city', 'state', 'whatsapp', 'regions', 'attendance', 'primaryColor', 'hasDomain', 'hasHosting']
     if (form.hasDomain === 'Sim') requiredFields.push('domain', 'domainPlatform', 'domainLogin')
     if (form.hasHosting === 'Sim') requiredFields.push('hostingPlatform', 'hostingLogin')
     return requiredFields
-  }, [form.action, form.hasDomain, form.hasHosting])
-  const missingRequired = useMemo(() => requiredFieldNames.filter(field => !form[field]?.trim()), [form, requiredFieldNames])
+  }, [form.hasDomain, form.hasHosting])
+  const missingRequired = useMemo(() => {
+    const missing = requiredFieldNames.filter(field => !form[field]?.trim())
+    form.additionalLawyers.forEach((lawyer, index) => {
+      if (!lawyer.name.trim()) missing.push(`additionalLawyerName-${index}`)
+      if (!lawyer.oab.trim()) missing.push(`additionalLawyerOab-${index}`)
+    })
+    return missing
+  }, [form, requiredFieldNames])
   const canCopy = missingRequired.length === 0
-  const completedRequired = requiredFieldNames.length - missingRequired.length
-  const completion = Math.round((completedRequired / requiredFieldNames.length) * 100)
+  const totalRequired = requiredFieldNames.length + (form.additionalLawyers.length * 2)
+  const completedRequired = totalRequired - missingRequired.length
+  const completion = Math.round((completedRequired / totalRequired) * 100)
 
   const goToField = name => {
     const element = document.querySelector(`[name="${name}"]`) || document.querySelector(`[data-field-name="${name}"] button`)
@@ -70,35 +143,26 @@ export default function ClientBriefingForm() {
     localStorage.removeItem(STORAGE_KEY)
     setForm(initialForm)
     setTemplatesOpen(false)
+    setSubmitted(false)
+    setSubmitError('')
   }
 
-  const result = useMemo(() => `# Briefing preenchido — Landing Page Jurídica
+  const result = useMemo(() => `# Informações do cliente — Landing Page Jurídica
 
-## 🎯 Projeto
-- Nome do projeto ou escritório: ${show(form.projectName)}
-- Área jurídica principal: ${show(form.legalArea)}
-- Objetivo da página: ${show(form.objective)}
-- Público desejado: ${show(form.audience)}
-- Serviço em destaque: ${show(form.highlight)}
-- Ação esperada: ${show(form.action === 'Outra' ? form.actionOther : form.action)}
-- Texto do botão: ${show(form.cta)}
+## 🖼️ Template
 - Template escolhido: ${show(form.template)}
 
 ## ⚖️ Identificação profissional
 - Nome do responsável: ${show(form.professionalName)}
 - Escritório: ${show(form.officeName)}
 - OAB: ${show(form.oab)}
-- Cidade e estado: ${show(form.city)}
+${form.additionalLawyers.length ? form.additionalLawyers.map((lawyer, index) => `- Advogado adicional ${index + 1}: ${show(lawyer.name)} — OAB ${show(lawyer.oab)}`).join('\n') : '- Advogados adicionais: Nenhum informado'}
+- Cidade: ${show(form.city)}
+- Estado: ${show(form.state)}
 - Biografia: ${show(form.biography)}
-
-## 📚 Serviços
-- Serviço principal: ${show(form.mainService)}
-- Descrição: ${show(form.mainServiceDescription)}
-- Outros serviços: ${show(form.additionalServices)}
 
 ## 📞 Contato e atendimento
 - WhatsApp: ${show(form.whatsapp)}
-- Mensagem do WhatsApp: ${show(form.whatsappMessage)}
 - E-mail: ${show(form.email)}
 - Telefone: ${show(form.phone)}
 - Rede profissional: ${show(form.social)}
@@ -107,15 +171,12 @@ export default function ClientBriefingForm() {
 - Endereço: ${show(form.address)}
 - Horários: ${show(form.hours)}
 
-## 🎨 Identidade e comunicação
+## 🎨 Identidade visual
 - Cor principal: ${show(form.primaryColor)}
 - Cor secundária: ${show(form.secondaryColor)}
 - Aparência: ${show(form.appearance)}
-- Tom de voz: ${show(form.tone)}
-- Palavras da marca: ${show(form.brandWords)}
 
-## 📎 Materiais e conteúdos
-- Materiais disponíveis: ${show(form.materials)}
+## ➕ Conteúdos adicionais
 - Perguntas frequentes: ${show(form.faqs)}
 - Situações atendidas: ${show(form.situations)}
 - Equipe: ${show(form.team)}
@@ -124,12 +185,33 @@ export default function ClientBriefingForm() {
 
 ## 🌐 Domínio, hospedagem e publicação
 - Já possui domínio: ${show(form.hasDomain)}
-${form.hasDomain === 'Sim' ? `- Domínio: ${show(form.domain)}\n- Plataforma do domínio: ${show(form.domainPlatform)}\n- Login/e-mail da conta: ${show(form.domainLogin)}\n- Forma de conceder o acesso: ${show(form.domainAccess)}` : ''}
+${form.hasDomain === 'Sim' ? `- Domínio: ${show(form.domain)}\n- Plataforma do domínio: ${show(form.domainPlatform)}\n- Login/e-mail da conta: ${show(form.domainLogin)}\n- Senha do domínio: ${show(form.domainPassword)}` : ''}
 - Já possui hospedagem: ${show(form.hasHosting)}
-${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPlatform)}\n- Login/e-mail da conta: ${show(form.hostingLogin)}\n- Forma de conceder o acesso: ${show(form.hostingAccess)}` : ''}
-- Formulário de contato: ${show(form.contactForm)}
+${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPlatform)}\n- Login/e-mail da conta: ${show(form.hostingLogin)}\n- Senha da hospedagem: ${show(form.hostingPassword)}` : ''}
 - Outras integrações: ${show(form.integrations)}
 `, [form])
+
+  const submitBriefing = async event => {
+    event.preventDefault()
+    if (!canCopy || submitting) return
+    setSubmitting(true)
+    setSubmitted(false)
+    setSubmitError('')
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, formType: 'landing-page-briefing', briefing: result }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) throw new Error(data.message || 'Não foi possível enviar o briefing.')
+      setSubmitted(true)
+    } catch (error) {
+      setSubmitError(error.message || 'Não foi possível enviar. Tente novamente em instantes.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const copyResult = async () => {
     if (!canCopy) return
@@ -151,71 +233,56 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
     <main className="client-form-main">
       <section className="client-form-intro">
         <span>FORMULÁRIO 4JURIS</span><h1>Conte-nos sobre o seu novo site.</h1>
-        <p>Preencha as informações abaixo. Ao finalizar, copie o briefing gerado e envie para a equipe responsável pelo seu projeto.</p>
+        <p>Preencha as informações abaixo. Ao finalizar, envie o briefing completo diretamente para a equipe responsável pelo seu projeto.</p>
         <div><b>🔴 Obrigatório</b><span>Campos essenciais para iniciar o site</span></div>
         <div className="draft-status"><span><Save size={15}/>{saved ? 'Rascunho salvo automaticamente' : 'Salvando alterações…'}</span><button type="button" onClick={clearDraft}><RotateCcw size={14}/> Limpar formulário</button></div>
       </section>
       <div className="client-form-layout">
-        <form className="client-briefing-form" onSubmit={event => { event.preventDefault(); copyResult() }}>
+        <form className="client-briefing-form" onSubmit={submitBriefing}>
           <section className={`required-progress ${canCopy ? 'is-complete' : ''}`} aria-live="polite">
-            <div className="required-progress-heading"><span>{canCopy ? <Check size={19}/> : <AlertCircle size={19}/>}</span><div><small>PREENCHIMENTO OBRIGATÓRIO</small><h2>{canCopy ? 'Tudo pronto para copiar' : `${missingRequired.length} ${missingRequired.length === 1 ? 'campo pendente' : 'campos pendentes'}`}</h2></div><strong>{completion}%</strong></div>
+            <div className="required-progress-heading"><span>{canCopy ? <Check size={19}/> : <AlertCircle size={19}/>}</span><div><small>PREENCHIMENTO OBRIGATÓRIO</small><h2>{canCopy ? 'Tudo pronto para enviar' : `${missingRequired.length} ${missingRequired.length === 1 ? 'campo pendente' : 'campos pendentes'}`}</h2></div><strong>{completion}%</strong></div>
             <div className="required-progress-bar"><i style={{ width: `${completion}%` }}/></div>
-            {!canCopy && <div className="missing-required-list">{missingRequired.map(name => <button type="button" key={name} onClick={() => goToField(name)}>{requiredLabels[name]}<span>Ir ao campo</span></button>)}</div>}
+            {!canCopy && <div className="missing-required-list">{missingRequired.map(name => <button type="button" key={name} onClick={() => goToField(name)}>{requiredLabels[name] || (name.includes('Name') ? 'Nome do advogado adicional' : 'OAB do advogado adicional')}<span>Ir ao campo</span></button>)}</div>}
           </section>
-          <Group title="🎯 1. Sobre o projeto">
-            <Field icon="🏢" label="Nome do projeto ou escritório" required name="projectName" value={form.projectName} onChange={update}/>
-            <Field icon="⚖️" label="Área jurídica principal" required name="legalArea" value={form.legalArea} onChange={update}/>
-            <Field icon="🎯" label="Objetivo principal da página" required area name="objective" value={form.objective} onChange={update}/>
-            <Field icon="👥" label="Quem você deseja atender?" required area name="audience" value={form.audience} onChange={update}/>
-            <Field icon="⭐" label="Serviço ou demanda em destaque" required name="highlight" value={form.highlight} onChange={update}/>
-            <Choice icon="👆" label="Ação esperada do visitante" required name="action" value={form.action} onChange={update} options={['Entrar em contato pelo WhatsApp', 'Preencher um formulário', 'Telefonar', 'Outra']}/>
-            {form.action === 'Outra' && <Field icon="✏️" label="Qual ação?" required name="actionOther" value={form.actionOther} onChange={update}/>} 
-            <Field icon="🔘" label="Texto do botão principal" name="cta" value={form.cta} onChange={update}/>
+          <Group title="🖼️ 1. Template escolhido">
             <TemplateSelector value={form.template} open={templatesOpen} onToggle={() => setTemplatesOpen(open => !open)} onSelect={selectTemplate}/>
           </Group>
 
           <Group title="⚖️ 2. Identificação profissional">
             <Field icon="👤" label="Nome completo do advogado ou responsável" required name="professionalName" value={form.professionalName} onChange={update}/>
             <Field icon="🏛️" label="Nome do escritório" name="officeName" value={form.officeName} onChange={update}/>
-            <Field icon="🪪" label="Número da OAB" required name="oab" value={form.oab} onChange={update} placeholder="OAB/UF 000.000"/>
-            <Field icon="📍" label="Cidade e estado" required name="city" value={form.city} onChange={update}/>
+            <Field icon="🪪" label="Número da OAB" required name="oab" value={form.oab} onChange={update} format={formatOabNumber} inputMode="text" autoCapitalize="characters" maxLength={12} placeholder="123.456"/>
+            <div className="additional-lawyers">
+              <div className="additional-lawyers-heading"><div><h3>Sócios ou advogados adicionais</h3><p>Adicione os demais profissionais que devem aparecer na página.</p></div><button type="button" onClick={addLawyer}><UserPlus size={16}/> Adicionar advogado</button></div>
+              {form.additionalLawyers.map((lawyer, index) => <section className="additional-lawyer-card" key={index}>
+                <div className="additional-lawyer-title"><strong>Advogado adicional {index + 1}</strong><button type="button" onClick={() => removeLawyer(index)} aria-label={`Remover advogado adicional ${index + 1}`}><Trash2 size={15}/> Remover</button></div>
+                <Field icon="👤" label="Nome completo" required name={`additionalLawyerName-${index}`} value={lawyer.name} onChange={event => updateLawyer(index, 'name', event.target.value)}/>
+                <Field icon="🪪" label="Número da OAB" required name={`additionalLawyerOab-${index}`} value={lawyer.oab} onChange={event => updateLawyer(index, 'oab', event.target.value)} format={formatOabNumber} inputMode="text" autoCapitalize="characters" maxLength={12} placeholder="123.456"/>
+              </section>)}
+            </div>
+            <Field icon="📍" label="Cidade" required name="city" value={form.city} onChange={update} autoComplete="address-level2" placeholder="Ex.: São Paulo"/>
+            <SelectField icon="🇧🇷" label="Estado" required name="state" value={form.state} onChange={update} autoComplete="address-level1" options={BRAZILIAN_STATES}/>
             <Field icon="📝" label="Breve biografia profissional" area name="biography" value={form.biography} onChange={update}/>
           </Group>
 
-          <Group title="📚 3. Serviços">
-            <Field icon="💼" label="Serviço principal" required name="mainService" value={form.mainService} onChange={update}/>
-            <Field icon="📖" label="Descrição do serviço" required area name="mainServiceDescription" value={form.mainServiceDescription} onChange={update}/>
-            <Field icon="➕" label="Outros serviços" area name="additionalServices" value={form.additionalServices} onChange={update}/>
-          </Group>
-
-          <Group title="📞 4. Contato e atendimento">
-            <Field icon="💬" label="WhatsApp" required name="whatsapp" value={form.whatsapp} onChange={update}/>
-            <Field icon="👋" label="Mensagem inicial do WhatsApp" name="whatsappMessage" value={form.whatsappMessage} onChange={update}/>
-            <Field icon="✉️" label="E-mail profissional" type="email" name="email" value={form.email} onChange={update}/>
-            <Field icon="☎️" label="Telefone adicional" name="phone" value={form.phone} onChange={update}/>
-            <Field icon="🔗" label="LinkedIn ou outra rede" name="social" value={form.social} onChange={update}/>
+          <Group title="📞 3. Contato e atendimento">
+            <Field icon="💬" label="WhatsApp" required type="tel" name="whatsapp" value={form.whatsapp} onChange={update} format={formatPhone} inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 00000-0000"/>
+            <Field icon="✉️" label="E-mail profissional" type="email" name="email" value={form.email} onChange={update} inputMode="email" autoComplete="email" spellCheck={false} placeholder="nome@escritorio.com.br"/>
+            <Field icon="☎️" label="Telefone adicional" type="tel" name="phone" value={form.phone} onChange={update} format={formatPhone} inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 0000-0000"/>
+            <Field icon="🔗" label="LinkedIn ou outra rede" type="url" name="social" value={form.social} onChange={update} inputMode="url" spellCheck={false} placeholder="https://linkedin.com/in/seu-perfil"/>
             <Field icon="🗺️" label="Cidades ou regiões atendidas" required name="regions" value={form.regions} onChange={update}/>
             <Choice icon="🤝" label="Formato de atendimento" required name="attendance" value={form.attendance} onChange={update} options={['Presencial', 'On-line', 'Presencial e on-line']}/>
             <Field icon="📌" label="Endereço" name="address" value={form.address} onChange={update}/>
             <Field icon="🕐" label="Dias e horários" name="hours" value={form.hours} onChange={update}/>
           </Group>
 
-          <Group title="🎨 5. Identidade visual">
+          <Group title="🎨 4. Identidade visual">
             <Field icon="🎨" label="Cor principal" required name="primaryColor" value={form.primaryColor} onChange={update}/>
             <Field icon="🖌️" label="Cor secundária" name="secondaryColor" value={form.secondaryColor} onChange={update}/>
             <Choice icon="🌓" label="Preferência de aparência" name="appearance" value={form.appearance} onChange={update} options={['Página clara', 'Página escura', 'Áreas claras e escuras', 'Seguir o template']}/>
           </Group>
 
-          <Group title="💬 6. Comunicação">
-            <Choice icon="🗣️" label="Tom de voz" name="tone" value={form.tone} onChange={update} options={['Formal', 'Próximo e acolhedor', 'Didático', 'Direto']}/>
-            <Field icon="✨" label="Três palavras que definem a página" name="brandWords" value={form.brandWords} onChange={update}/>
-          </Group>
-
-          <Group title="📎 7. Materiais disponíveis" note="Envie à equipe o máximo de materiais autorizados: logotipo, fotos, manual da marca, textos e vídeos.">
-            <Field icon="📦" label="Descreva os materiais que serão enviados" area name="materials" value={form.materials} onChange={update}/>
-          </Group>
-
-          <Group title="➕ 8. Conteúdos adicionais">
+          <Group title="➕ 5. Conteúdos adicionais">
             <Field icon="❓" label="Perguntas frequentes" area name="faqs" value={form.faqs} onChange={update}/>
             <Field icon="🧩" label="Situações ou problemas atendidos" area name="situations" value={form.situations} onChange={update}/>
             <Field icon="👥" label="Informações da equipe" area name="team" value={form.team} onChange={update}/>
@@ -223,29 +290,29 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             <Field icon="💬" label="Depoimentos ou feedbacks autorizados" area name="testimonials" value={form.testimonials} onChange={update}/>
           </Group>
 
-          <Group title="🌐 9. Domínio, hospedagem e publicação">
+          <Group title="🌐 6. Domínio, hospedagem e publicação">
             <Choice icon="🌍" label="Você já possui um domínio?" required name="hasDomain" value={form.hasDomain} onChange={update} options={['Sim', 'Não']}/>
             {form.hasDomain === 'Sim' && <ConditionalFields title="Dados do domínio">
-              <Field icon="🔗" label="Qual é o domínio?" required name="domain" value={form.domain} onChange={update} placeholder="exemplo.com.br"/>
+              <Field icon="🔗" label="Qual é o domínio?" required name="domain" value={form.domain} onChange={update} format={formatDomain} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="exemplo.com.br"/>
               <Field icon="🏪" label="Em qual plataforma ele foi comprado?" required name="domainPlatform" value={form.domainPlatform} onChange={update} placeholder="Ex.: Registro.br, GoDaddy, Hostinger"/>
               <Field icon="👤" label="Login ou e-mail usado na plataforma" required name="domainLogin" value={form.domainLogin} onChange={update}/>
-              <Field icon="🔐" label="Como a equipe receberá o acesso?" area name="domainAccess" value={form.domainAccess} onChange={update} placeholder="Prefira adicionar a equipe como colaboradora ou combinar o envio seguro. Não escreva sua senha neste formulário."/>
+              <Field icon="🔐" label="Senha de acesso (opcional)" type="password" name="domainPassword" value={form.domainPassword} onChange={update} autoComplete="current-password" placeholder="Informe a senha para envio à equipe"/>
             </ConditionalFields>}
             <Choice icon="🖥️" label="Você já possui hospedagem?" required name="hasHosting" value={form.hasHosting} onChange={update} options={['Sim', 'Não']}/>
             {form.hasHosting === 'Sim' && <ConditionalFields title="Dados da hospedagem">
               <Field icon="☁️" label="Qual é a plataforma de hospedagem?" required name="hostingPlatform" value={form.hostingPlatform} onChange={update} placeholder="Ex.: Vercel, Hostinger, Locaweb"/>
               <Field icon="👤" label="Login ou e-mail usado na plataforma" required name="hostingLogin" value={form.hostingLogin} onChange={update}/>
-              <Field icon="🔐" label="Como a equipe receberá o acesso?" area name="hostingAccess" value={form.hostingAccess} onChange={update} placeholder="Prefira convidar a equipe para o projeto ou combinar o envio seguro. Não escreva sua senha neste formulário."/>
+              <Field icon="🔐" label="Senha de acesso (opcional)" type="password" name="hostingPassword" value={form.hostingPassword} onChange={update} autoComplete="current-password" placeholder="Informe a senha para envio à equipe"/>
             </ConditionalFields>}
-            <Choice icon="📨" label="Precisa de formulário de contato?" name="contactForm" value={form.contactForm} onChange={update} options={['Sim', 'Não']}/>
             <Field icon="🔌" label="Outras integrações" area name="integrations" value={form.integrations} onChange={update}/>
           </Group>
-          <button className="generate-briefing" type="submit" disabled={!canCopy}><Copy size={18}/> {canCopy ? 'Gerar e copiar meu briefing' : `Preencha mais ${missingRequired.length} ${missingRequired.length === 1 ? 'campo obrigatório' : 'campos obrigatórios'}`}</button>
+          <button className="generate-briefing" type="submit" disabled={!canCopy || submitting}>{submitted ? <Check size={18}/> : <Send size={18}/>} {submitting ? 'Enviando briefing…' : submitted ? 'Briefing enviado com sucesso!' : canCopy ? 'Enviar briefing para a 4Juris' : `Preencha mais ${missingRequired.length} ${missingRequired.length === 1 ? 'campo obrigatório' : 'campos obrigatórios'}`}</button>
+          <div className="briefing-send-feedback" aria-live="polite">{submitted && <p className="is-success"><Check size={16}/> Todos os dados foram enviados para a equipe 4Juris.</p>}{submitError && <p className="is-error"><AlertCircle size={16}/> {submitError}</p>}</div>
         </form>
 
         <aside className="briefing-result">
           <div className="briefing-result-heading"><span><Send size={17}/></span><div><small>RESULTADO</small><h2>Seu briefing pronto</h2></div></div>
-          <p>O conteúdo é atualizado enquanto você preenche. Ao terminar, copie e envie para a equipe 4Juris.</p>
+          <p>O conteúdo é atualizado enquanto você preenche e será enviado integralmente para a equipe 4Juris. Você também pode copiá-lo como backup.</p>
           <pre>{result}</pre>
           <button type="button" onClick={copyResult} disabled={!canCopy} aria-disabled={!canCopy}>{copied ? <Check size={17}/> : <Copy size={17}/>} {copied ? 'Briefing copiado!' : canCopy ? 'Copiar resultado' : `Faltam ${missingRequired.length} ${missingRequired.length === 1 ? 'campo obrigatório' : 'campos obrigatórios'}`}</button>
         </aside>
@@ -259,13 +326,19 @@ function Group({ title, note, children }) {
 }
 
 function ConditionalFields({ title, children }) {
-  return <section className="conditional-fields"><h3>🔓 {title}</h3><p>Informe o usuário de acesso, mas não escreva senhas neste formulário.</p>{children}</section>
+  return <section className="conditional-fields"><h3>🔒 {title}</h3><p>O login e a senha informados serão enviados diretamente para a equipe 4Juris por e-mail. As senhas não ficam salvas no rascunho deste navegador.</p>{children}</section>
 }
 
-function Field({ icon, label, required, area, ...props }) {
+function Field({ icon, label, required, area, format, onChange, ...props }) {
   const Element = area ? 'textarea' : 'input'
   const invalid = Boolean(required && !props.value?.trim())
-  return <label className={`client-field ${invalid ? 'is-required-missing' : ''}`}><span><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</span><Element required={required} aria-invalid={invalid} {...props}/></label>
+  const handleChange = event => onChange(format ? { target: { name: props.name, value: format(event.target.value) } } : event)
+  return <label className={`client-field ${invalid ? 'is-required-missing' : ''}`}><span><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</span><Element required={required} aria-invalid={invalid} onChange={handleChange} {...props}/></label>
+}
+
+function SelectField({ icon, label, required, options, ...props }) {
+  const invalid = Boolean(required && !props.value?.trim())
+  return <label className={`client-field ${invalid ? 'is-required-missing' : ''}`}><span><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</span><select required={required} aria-invalid={invalid} {...props}><option value="">Selecione</option>{options.map(([value, name]) => <option value={value} key={value}>{value} — {name}</option>)}</select></label>
 }
 
 function Choice({ icon, label, required, options, name, value, onChange }) {

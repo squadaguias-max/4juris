@@ -54,6 +54,18 @@ const nicksonPhoto = teamAssets.find(member => member.file === 'time_nickson.web
 const clientLogos = Object.entries(import.meta.glob('./assets/clientes/*', { eager: true, import: 'default' })).map(([path, image]) => ({ path, image, name: path.split('/').pop().replace(/^cliente_/i, '').replace(/-1|\.[^.]+$/g, '').replace(/_/g, ' ') }))
 const templateArchiveSlugs = { 1: 'avlegal', 2: 'almeida-vasconcelos', 3: 'aurea', 4: 'ferraz-saude', 5: 'lume', 6: 'aurea-dark', 7: 'civitas-advocacia', 8: 'maison-albuquerque', 9: 'nexus-law', 10: 'vertice-familia', 11: 'metodo-juridico-360', 12: 'alerta-criminal', 13: 'flora-legal', 14: 'orbe-advocacia', 15: 'alva-real-estate-law' }
 const templateArchiveUrl = template => `/downloads/template-${String(template.id).padStart(2, '0')}-${templateArchiveSlugs[template.id]}.zip`
+async function submitContactForm(form, formType) {
+  const fields = Object.fromEntries(new FormData(form).entries())
+  const response = await fetch('/api/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...fields, formType }),
+  })
+  const data = await response.json()
+  if (!response.ok || !data.success) throw new Error(data.message || 'Não foi possível enviar o formulário.')
+  return data
+}
+
 const templateTutorialSteps = [
   { icon: ClipboardList, title: 'O que o cliente deve informar no briefing', text: 'Todas as perguntas necessárias já estão organizadas no Formulário — Nova Landing Page, disponível logo abaixo do tutorial para visualizar, copiar ou baixar.', items: ['Envie o formulário ao cliente e aguarde o preenchimento', 'Confira os campos identificados como obrigatórios', 'Receba também logo, fotos, textos e demais materiais disponíveis'], result: 'Use sempre o formulário oficial abaixo; não é necessário criar outro briefing.' },
   { icon: Search, title: 'Escolha o template', text: 'Compare as miniaturas e abra os modelos em tela cheia. Escolha pela estrutura, conteúdo e objetivo — não apenas pelas cores.', items: ['Considere o público e a ação principal da página', 'Verifique se as seções atendem ao briefing', 'Anote o número ou o nome do modelo escolhido'], result: 'Sem preferência? A IA pode analisar e escolher o modelo mais adequado.' },
@@ -92,8 +104,12 @@ export default function App() {
   const [openFaq, setOpenFaq] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [sent, setSent] = useState(false)
+  const [leadSubmitting, setLeadSubmitting] = useState(false)
+  const [leadError, setLeadError] = useState('')
   const [exitOpen, setExitOpen] = useState(false)
   const [exitSent, setExitSent] = useState(false)
+  const [exitSubmitting, setExitSubmitting] = useState(false)
+  const [exitError, setExitError] = useState('')
   const [feedbackIndex, setFeedbackIndex] = useState(0)
   const [feedbackPaused, setFeedbackPaused] = useState(false)
   const [feedbackDragging, setFeedbackDragging] = useState(false)
@@ -166,7 +182,37 @@ export default function App() {
     return () => observer.disconnect()
   }, [])
 
-  const submit = event => { event.preventDefault(); setSent(true) }
+  const submit = async event => {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    setLeadSubmitting(true)
+    setLeadError('')
+    try {
+      await submitContactForm(formElement, 'strategic-session')
+      formElement.reset()
+      setSent(true)
+    } catch (error) {
+      setLeadError(error.message || 'Não foi possível enviar. Tente novamente em instantes.')
+    } finally {
+      setLeadSubmitting(false)
+    }
+  }
+
+  const submitExitForm = async event => {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    setExitSubmitting(true)
+    setExitError('')
+    try {
+      await submitContactForm(formElement, 'ebook')
+      formElement.reset()
+      setExitSent(true)
+    } catch (error) {
+      setExitError(error.message || 'Não foi possível enviar. Tente novamente em instantes.')
+    } finally {
+      setExitSubmitting(false)
+    }
+  }
   const closeMenu = () => setMenuOpen(false)
   const moveFeedback = direction => setFeedbackIndex(current => (current + direction + feedbackImages.length) % feedbackImages.length)
   const startFeedbackDrag = event => { feedbackDragStart.current = event.clientX; setFeedbackDragging(true); setFeedbackPaused(true); event.currentTarget.setPointerCapture(event.pointerId) }
@@ -342,7 +388,7 @@ export default function App() {
 
       <section className="process section" id="contrate">
         <div className="process-copy"><span className="section-index">07 / SESSÃO ESTRATÉGICA</span><h2>Dar o próximo passo leva <em>menos de um minuto.</em></h2><div className="steps"><article><span>01</span><div><h3>Preencha o formulário</h3><p>Envie suas informações de contato. Seus dados estarão seguros com a nossa equipe.</p></div></article><article><span>02</span><div><h3>Receba uma ligação</h3><p>Em até 12 horas, um especialista entrará em contato para agendar sua sessão estratégica.</p></div></article></div></div>
-        <form className="lead-form" onSubmit={submit}>{sent ? <div className="form-success"><Check /><h3>Cadastro recebido.</h3><p>Nossa equipe entrará em contato para agendar sua sessão estratégica.</p><button type="button" onClick={() => setSent(false)}>Enviar outro contato</button></div> : <><small>Sessão estratégica</small><h3>Vamos acelerar o seu escritório?</h3><label>Nome completo<input required name="name" placeholder="Como podemos chamar você?" /></label><label>E-mail profissional<input required type="email" name="email" placeholder="voce@escritorio.com.br" /></label><label>WhatsApp<input required type="tel" name="phone" placeholder="(00) 00000-0000" /></label><label>Nome do escritório<input name="company" placeholder="Seu escritório" /></label><button type="submit">Quero uma sessão estratégica <Send size={16} /></button><p>Ao enviar, você concorda em receber o contato da equipe 4Juris.</p></>}</form>
+        <form className="lead-form" onSubmit={submit}>{sent ? <div className="form-success"><Check /><h3>Cadastro recebido.</h3><p>Seus dados foram enviados. Nossa equipe entrará em contato para agendar sua sessão estratégica.</p><button type="button" onClick={() => { setSent(false); setLeadError('') }}>Enviar outro contato</button></div> : <><small>Sessão estratégica</small><h3>Vamos acelerar o seu escritório?</h3><input type="checkbox" name="botcheck" className="form-botcheck" tabIndex="-1" autoComplete="off" /><label>Nome completo<input required name="name" autoComplete="name" placeholder="Como podemos chamar você?" /></label><label>E-mail profissional<input required type="email" name="email" autoComplete="email" placeholder="voce@escritorio.com.br" /></label><label>WhatsApp<input required type="tel" name="phone" autoComplete="tel" placeholder="(00) 00000-0000" /></label><label>Nome do escritório<input name="company" autoComplete="organization" placeholder="Seu escritório" /></label><button type="submit" disabled={leadSubmitting}>{leadSubmitting ? 'Enviando seus dados…' : 'Quero uma sessão estratégica'} <Send size={16} /></button>{leadError && <p className="form-error" role="alert">{leadError}</p>}<p>Ao enviar, você concorda em receber o contato da equipe 4Juris.</p></>}</form>
       </section>
 
       <section className="faq section"><div className="faq-title"><span className="section-index">08 / F.A.Q.</span><h2>Perguntas<br /><em>frequentes.</em></h2><p>Ainda ficou com alguma dúvida?</p><a href="#contrate">Fale com um especialista <ArrowRight size={15} /></a></div><div className="faq-list">{faqs.map(([question, answer], index) => <article className={openFaq === index ? 'open' : ''} key={question}><button onClick={() => setOpenFaq(openFaq === index ? -1 : index)}><span>{question}</span><ChevronDown /></button><div><p>{answer}</p></div></article>)}</div></section>
@@ -356,7 +402,7 @@ export default function App() {
         <div className="exit-art"><img src="/teses-escalaveis.png" alt="E-book Teses Escaláveis no Digital, por 4Juris" /><span>Material exclusivo 4Juris</span></div>
         <div className="exit-content">{exitSent ? <div className="exit-success"><Check /><small>Cadastro recebido</small><h2>O material está a caminho.</h2><p>Confira sua caixa de entrada. Em breve, você receberá as melhores teses para escalar no digital.</p><button type="button" onClick={() => setExitOpen(false)}>Continuar no site</button></div> : <>
           <span className="exit-kicker">Espere <b>✋</b></span><h2 id="exit-title">Não saia de mãos abanando!</h2><p>Tenha acesso às melhores <strong>Teses para Escalar no Digital.</strong></p><small>Coloque suas informações abaixo para receber ↓</small>
-          <form onSubmit={event => { event.preventDefault(); setExitSent(true) }}><div className="exit-fields"><label>Nome<input required name="exit-name" placeholder="Seu nome..." /></label><label>E-mail<input required type="email" name="exit-email" placeholder="Seu melhor e-mail..." /></label><label>Contato<input required type="tel" name="exit-phone" placeholder="Seu WhatsApp..." /></label><label>Qual o faturamento médio mensal do escritório?<select required name="exit-revenue" defaultValue=""><option value="" disabled>Selecione uma faixa</option><option>Menos de R$ 10 mil</option><option>De R$ 10 mil a R$ 30 mil</option><option>De R$ 30 mil a R$ 50 mil</option><option>De R$ 50 mil a R$ 100 mil</option><option>Acima de R$ 100 mil</option></select></label></div><button type="submit">Quero receber as teses <ArrowRight size={17} /></button><small>Seus dados estão seguros com a 4Juris.</small></form>
+          <form onSubmit={submitExitForm}><input type="checkbox" name="botcheck" className="form-botcheck" tabIndex="-1" autoComplete="off" /><div className="exit-fields"><label>Nome<input required name="name" autoComplete="name" placeholder="Seu nome..." /></label><label>E-mail<input required type="email" name="email" autoComplete="email" placeholder="Seu melhor e-mail..." /></label><label>Contato<input required type="tel" name="phone" autoComplete="tel" placeholder="Seu WhatsApp..." /></label><label>Qual o faturamento médio mensal do escritório?<select required name="revenue" defaultValue=""><option value="" disabled>Selecione uma faixa</option><option>Menos de R$ 10 mil</option><option>De R$ 10 mil a R$ 30 mil</option><option>De R$ 30 mil a R$ 50 mil</option><option>De R$ 50 mil a R$ 100 mil</option><option>Acima de R$ 100 mil</option></select></label></div><button type="submit" disabled={exitSubmitting}>{exitSubmitting ? 'Enviando seus dados…' : 'Quero receber as teses'} <ArrowRight size={17} /></button>{exitError && <p className="form-error" role="alert">{exitError}</p>}<small>Seus dados estão seguros com a 4Juris.</small></form>
         </>}</div>
       </section>
     </div>}
