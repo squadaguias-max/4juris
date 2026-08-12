@@ -233,7 +233,7 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
     <main className="client-form-main">
       <section className="client-form-intro">
         <span>FORMULÁRIO 4JURIS</span><h1>Conte-nos sobre o seu novo site.</h1>
-        <p>Preencha as informações abaixo. Ao finalizar, envie o briefing completo diretamente para a equipe responsável pelo seu projeto.</p>
+        <p>Preencha as informações abaixo para nos ajudar a compreender sua identidade, suas preferências e os objetivos do projeto. Ao finalizar, envie o briefing completo diretamente para a equipe responsável pelo seu novo site.</p>
         <div><b>🔴 Obrigatório</b><span>Campos essenciais para iniciar o site</span></div>
         <div className="draft-status"><span><Save size={15}/>{saved ? 'Rascunho salvo automaticamente' : 'Salvando alterações…'}</span><button type="button" onClick={clearDraft}><RotateCcw size={14}/> Limpar formulário</button></div>
       </section>
@@ -244,7 +244,14 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             <div className="required-progress-bar"><i style={{ width: `${completion}%` }}/></div>
             {!canCopy && <div className="missing-required-list">{missingRequired.map(name => <button type="button" key={name} onClick={() => goToField(name)}>{requiredLabels[name] || (name.includes('Name') ? 'Nome do advogado adicional' : 'OAB do advogado adicional')}<span>Ir ao campo</span></button>)}</div>}
           </section>
-          <Group title="🖼️ 1. Template escolhido">
+          <Group title="🖼️ 1. Escolha do template">
+            <div className="template-explanation">
+              <span>REFERÊNCIA VISUAL</span>
+              <h3>O template define uma direção, não o resultado final.</h3>
+              <p>Os templates servem para você indicar o estilo visual que mais combina com o seu projeto. A escolha nos ajuda a compreender suas preferências de composição, organização das informações, tipografia, cores, formas e atmosfera geral da página.</p>
+              <p>O seu site <strong>não será uma cópia exata do modelo selecionado</strong>. Usaremos essa referência como ponto de partida para criar uma identidade própria, adaptada ao seu perfil profissional, à sua área de atuação, ao seu conteúdo e aos objetivos do seu negócio. Cores, imagens, textos, seções e outros elementos poderão ser ajustados ou reorganizados para que o resultado seja coerente, exclusivo e verdadeiramente personalizado.</p>
+              <p className="template-explanation-summary"><strong>Em resumo:</strong> você escolhe a direção visual que prefere, e nós a transformamos em um site único para você.</p>
+            </div>
             <TemplateSelector value={form.template} open={templatesOpen} onToggle={() => setTemplatesOpen(open => !open)} onSelect={selectTemplate}/>
           </Group>
 
@@ -348,9 +355,9 @@ function Choice({ icon, label, required, options, name, value, onChange }) {
 
 function TemplateSelector({ value, open, onToggle, onSelect }) {
   return <section className={`template-form-selector ${value ? '' : 'is-required-missing'}`} data-field-name="template">
-    <div className="template-selector-label"><span className="field-label"><i aria-hidden="true">🖼️</i>Template escolhido</span><b>🔴 Obrigatório</b></div>
+    <div className="template-selector-label"><span className="field-label"><i aria-hidden="true">🖼️</i>Template de referência</span><b>🔴 Obrigatório</b></div>
     <button className={`template-selector-trigger ${value ? 'has-value' : ''}`} type="button" onClick={onToggle} aria-expanded={open}>
-      <span>{value || 'Clique para visualizar e selecionar um template'}</span><ChevronDown size={19}/>
+      <span>{value || 'Clique para visualizar e escolher sua referência visual'}</span><ChevronDown size={19}/>
     </button>
     <input className="template-selection-validation" tabIndex="-1" aria-hidden="true" required value={value} onChange={() => {}}/>
     {open && <div className="template-choice-grid">{templates.map((template, index) => <article className="template-choice-card" key={template.id}>
