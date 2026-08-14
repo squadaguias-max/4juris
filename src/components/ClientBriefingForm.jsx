@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, RotateCcw, Save, Send, Trash2, UserPlus } from 'lucide-react'
 import Brand from './Brand'
 import LazyTemplateFrame from './LazyTemplateFrame'
 import { templates } from '../data/templates'
 
 const STORAGE_KEY = '4juris-client-briefing-draft-v1'
+const EXISTING_DESIGN_OPTION = 'Design próprio — já alinhado com o responsável pelo atendimento'
 const BRAZILIAN_STATES = [
   ['AC', 'Acre'], ['AL', 'Alagoas'], ['AP', 'Amapá'], ['AM', 'Amazonas'], ['BA', 'Bahia'], ['CE', 'Ceará'], ['DF', 'Distrito Federal'],
   ['ES', 'Espírito Santo'], ['GO', 'Goiás'], ['MA', 'Maranhão'], ['MT', 'Mato Grosso'], ['MS', 'Mato Grosso do Sul'], ['MG', 'Minas Gerais'],
@@ -40,6 +41,8 @@ const FIELD_STEP = {
   hostingPlatform: 5,
   hostingLogin: 5,
 }
+const FormValidationContext = createContext(false)
+const getFieldStep = name => name.startsWith('additionalLawyer') ? 1 : FIELD_STEP[name]
 
 const formatPhone = value => {
   let digits = value.replace(/\D/g, '')
@@ -102,6 +105,7 @@ export default function ClientBriefingForm() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [validationSteps, setValidationSteps] = useState([])
   const stepTopRef = useRef(null)
   const update = event => {
     setSubmitted(false)
@@ -112,6 +116,12 @@ export default function ClientBriefingForm() {
     setSubmitted(false)
     setSubmitError('')
     setForm(current => ({ ...current, template: `Template ${String(template.id).padStart(2, '0')} — ${template.name}` }))
+    setTemplatesOpen(false)
+  }
+  const selectExistingDesign = () => {
+    setSubmitted(false)
+    setSubmitError('')
+    setForm(current => ({ ...current, template: EXISTING_DESIGN_OPTION }))
     setTemplatesOpen(false)
   }
   const addLawyer = () => {
@@ -154,8 +164,7 @@ export default function ClientBriefingForm() {
     return missing
   }, [form, requiredFieldNames])
   const stepMissingCounts = useMemo(() => FORM_STEPS.map((_, stepIndex) => missingRequired.filter(name => {
-    const fieldStep = name.startsWith('additionalLawyer') ? 1 : FIELD_STEP[name]
-    return fieldStep === stepIndex
+    return getFieldStep(name) === stepIndex
   }).length), [missingRequired])
   const canCopy = missingRequired.length === 0
 
@@ -167,11 +176,41 @@ export default function ClientBriefingForm() {
     }, 0)
   }
 
+  const revealStepErrors = stepIndex => {
+    setValidationSteps(current => current.includes(stepIndex) ? current : [...current, stepIndex])
+  }
+
+  const focusField = name => {
+    window.setTimeout(() => {
+      const element = document.querySelector(`[name="${name}"]`) || document.querySelector(`[data-field-name="${name}"] button`)
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      window.setTimeout(() => element?.focus(), 350)
+    }, 120)
+  }
+
+  const requestStepChange = targetStep => {
+    const nextStep = Math.max(0, Math.min(FORM_STEPS.length - 1, targetStep))
+    if (nextStep <= activeStep) {
+      changeStep(nextStep)
+      return
+    }
+    const blockingStep = Array.from({ length: nextStep - activeStep }, (_, index) => activeStep + index).find(stepIndex => stepMissingCounts[stepIndex] > 0)
+    if (blockingStep === undefined) {
+      changeStep(nextStep)
+      return
+    }
+    const firstMissing = missingRequired.find(name => getFieldStep(name) === blockingStep)
+    revealStepErrors(blockingStep)
+    changeStep(blockingStep)
+    if (firstMissing) focusField(firstMissing)
+  }
+
   const clearDraft = () => {
     if (!window.confirm('Deseja apagar todas as respostas salvas neste formulário?')) return
     localStorage.removeItem(STORAGE_KEY)
     setForm(initialForm)
     setActiveStep(0)
+    setValidationSteps([])
     setTemplatesOpen(false)
     setSubmitted(false)
     setSubmitError('')
@@ -223,7 +262,15 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
 
   const submitBriefing = async event => {
     event.preventDefault()
-    if (!canCopy || submitting) return
+    if (submitting) return
+    if (!canCopy) {
+      const firstMissing = missingRequired[0]
+      const firstInvalidStep = getFieldStep(firstMissing)
+      revealStepErrors(firstInvalidStep)
+      changeStep(firstInvalidStep)
+      focusField(firstMissing)
+      return
+    }
     setSubmitting(true)
     setSubmitted(false)
     setSubmitError('')
@@ -262,23 +309,23 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
     <header className="client-form-header"><Brand href="/"/><a href="/templates-equipe"><ArrowLeft size={17}/> Voltar</a></header>
     <main className="client-form-main">
       <section className="client-form-intro">
-        <span>FORMULÁRIO 4JURIS</span><h1>Conte-nos sobre o seu novo site.</h1>
+        <span>FORMULÁRIO 4JURIS</span><h1>Conte-nos sobre a sua nova LP.</h1>
         <p>Preencha as informações abaixo para nos ajudar a compreender sua identidade, suas preferências e os objetivos do projeto. Ao finalizar, envie o briefing completo diretamente para a equipe responsável pelo seu novo site.</p>
         <div><b>🔴 Obrigatório</b><span>Campos essenciais para iniciar o site</span></div>
         <div className="draft-status"><span><Save size={15}/>{saved ? 'Rascunho salvo automaticamente' : 'Salvando alterações…'}</span><button type="button" onClick={clearDraft}><RotateCcw size={14}/> Limpar formulário</button></div>
       </section>
-      <div className="client-form-layout">
-        <form className="client-briefing-form" onSubmit={submitBriefing}>
+      <div className={`client-form-layout ${activeStep < FORM_STEPS.length - 1 ? 'form-only' : ''}`}>
+        <form className="client-briefing-form" onSubmit={submitBriefing} noValidate>
           <nav className="form-stepper" aria-label="Etapas do formulário" ref={stepTopRef}>
             {FORM_STEPS.map((step, index) => <div className="form-stepper-item" key={step.title}>
-              <button className={`${activeStep === index ? 'is-active' : ''} ${index < activeStep && stepMissingCounts[index] === 0 ? 'is-complete' : ''}`} type="button" onClick={() => changeStep(index)} aria-current={activeStep === index ? 'step' : undefined}>
+              <button className={`${activeStep === index ? 'is-active' : ''} ${index < activeStep && stepMissingCounts[index] === 0 ? 'is-complete' : ''}`} type="button" onClick={() => requestStepChange(index)} aria-current={activeStep === index ? 'step' : undefined}>
                 <span>{index < activeStep && stepMissingCounts[index] === 0 ? <Check size={15}/> : String(index + 1).padStart(2, '0')}</span>
                 <span><strong>{step.title}</strong><small>{step.description}</small></span>
               </button>
               {index < FORM_STEPS.length - 1 && <ChevronRight className="form-stepper-arrow" size={19} aria-hidden="true"/>}
             </div>)}
           </nav>
-          {activeStep === 0 && <Group title="🖼️ 1. Escolha do template">
+          {activeStep === 0 && <Group title="🖼️ 1. Escolha do template" showValidation={validationSteps.includes(0)}>
             <div className="template-explanation">
               <span>REFERÊNCIA VISUAL</span>
               <h3>O template define uma direção, não o resultado final.</h3>
@@ -286,10 +333,10 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
               <p>O seu site <strong>não será uma cópia exata do modelo selecionado</strong>. Usaremos essa referência como ponto de partida para criar uma identidade própria, adaptada ao seu perfil profissional, à sua área de atuação, ao seu conteúdo e aos objetivos do seu negócio. Cores, imagens, textos, seções e outros elementos poderão ser ajustados ou reorganizados para que o resultado seja coerente, exclusivo e verdadeiramente personalizado.</p>
               <p className="template-explanation-summary"><strong>Em resumo:</strong> você escolhe a direção visual que prefere, e nós a transformamos em um site único para você.</p>
             </div>
-            <TemplateSelector value={form.template} open={templatesOpen} onToggle={() => setTemplatesOpen(open => !open)} onSelect={selectTemplate}/>
+            <TemplateSelector value={form.template} open={templatesOpen} onToggle={() => setTemplatesOpen(open => !open)} onSelect={selectTemplate} onSelectExistingDesign={selectExistingDesign}/>
           </Group>}
 
-          {activeStep === 1 && <Group title="⚖️ 2. Identificação profissional">
+          {activeStep === 1 && <Group title="⚖️ 2. Identificação profissional" showValidation={validationSteps.includes(1)}>
             <Field icon="👤" label="Nome completo do advogado ou responsável" required name="professionalName" value={form.professionalName} onChange={update}/>
             <Field icon="🏛️" label="Nome do escritório" name="officeName" value={form.officeName} onChange={update}/>
             <Field icon="🪪" label="Número da OAB" required name="oab" value={form.oab} onChange={update} format={formatOabNumber} inputMode="text" autoCapitalize="characters" maxLength={12} placeholder="123.456"/>
@@ -306,7 +353,7 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             <Field icon="📝" label="Breve biografia profissional" area name="biography" value={form.biography} onChange={update}/>
           </Group>}
 
-          {activeStep === 2 && <Group title="📞 3. Contato e atendimento">
+          {activeStep === 2 && <Group title="📞 3. Contato e atendimento" showValidation={validationSteps.includes(2)}>
             <Field icon="💬" label="WhatsApp" required type="tel" name="whatsapp" value={form.whatsapp} onChange={update} format={formatPhone} inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 00000-0000"/>
             <Field icon="✉️" label="E-mail profissional" type="email" name="email" value={form.email} onChange={update} inputMode="email" autoComplete="email" spellCheck={false} placeholder="nome@escritorio.com.br"/>
             <Field icon="☎️" label="Telefone adicional" type="tel" name="phone" value={form.phone} onChange={update} format={formatPhone} inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 0000-0000"/>
@@ -317,13 +364,13 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             <Field icon="🕐" label="Dias e horários" name="hours" value={form.hours} onChange={update}/>
           </Group>}
 
-          {activeStep === 3 && <Group title="🎨 4. Identidade visual">
+          {activeStep === 3 && <Group title="🎨 4. Identidade visual" showValidation={validationSteps.includes(3)}>
             <Field icon="🎨" label="Cor principal" required name="primaryColor" value={form.primaryColor} onChange={update}/>
             <Field icon="🖌️" label="Cor secundária" name="secondaryColor" value={form.secondaryColor} onChange={update}/>
             <Choice icon="🌓" label="Preferência de aparência" name="appearance" value={form.appearance} onChange={update} options={['Página clara', 'Página escura', 'Áreas claras e escuras', 'Seguir o template']}/>
           </Group>}
 
-          {activeStep === 4 && <Group title="➕ 5. Conteúdos adicionais">
+          {activeStep === 4 && <Group title="➕ 5. Conteúdos adicionais" showValidation={validationSteps.includes(4)}>
             <Field icon="❓" label="Perguntas frequentes" area name="faqs" value={form.faqs} onChange={update}/>
             <Field icon="🧩" label="Situações ou problemas atendidos" area name="situations" value={form.situations} onChange={update}/>
             <Field icon="👥" label="Informações da equipe" area name="team" value={form.team} onChange={update}/>
@@ -331,7 +378,7 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             <Field icon="💬" label="Depoimentos ou feedbacks autorizados" area name="testimonials" value={form.testimonials} onChange={update}/>
           </Group>}
 
-          {activeStep === 5 && <Group title="🌐 6. Domínio, hospedagem e publicação">
+          {activeStep === 5 && <Group title="🌐 6. Domínio, hospedagem e publicação" showValidation={validationSteps.includes(5)}>
             <Choice icon="🌍" label="Você já possui um domínio?" required name="hasDomain" value={form.hasDomain} onChange={update} options={['Sim', 'Não']}/>
             {form.hasDomain === 'Sim' && <ConditionalFields title="Dados do domínio">
               <Field icon="🔗" label="Qual é o domínio?" required name="domain" value={form.domain} onChange={update} format={formatDomain} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="exemplo.com.br"/>
@@ -347,29 +394,30 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
             </ConditionalFields>}
             <Field icon="🔌" label="Outras integrações" area name="integrations" value={form.integrations} onChange={update}/>
           </Group>}
+          {validationSteps.includes(activeStep) && stepMissingCounts[activeStep] > 0 && <p className="step-validation-message" role="alert"><AlertCircle size={16}/> Preencha os campos obrigatórios desta etapa para continuar.</p>}
           <div className="form-step-actions">
             <button className="form-step-back" type="button" onClick={() => changeStep(activeStep - 1)} disabled={activeStep === 0}><ChevronLeft size={18}/> Voltar</button>
             <span>Etapa {activeStep + 1} de {FORM_STEPS.length}</span>
             {activeStep < FORM_STEPS.length - 1
-              ? <button className="form-step-next" type="button" onClick={() => changeStep(activeStep + 1)}>Próxima etapa <ChevronRight size={18}/></button>
-              : <button className="generate-briefing" type="submit" disabled={!canCopy || submitting}>{submitted ? <Check size={18}/> : <Send size={18}/>} {submitting ? 'Enviando briefing…' : submitted ? 'Briefing enviado com sucesso!' : canCopy ? 'Enviar briefing para a 4Juris' : `Faltam ${missingRequired.length} ${missingRequired.length === 1 ? 'campo' : 'campos'}`}</button>}
+              ? <button className="form-step-next" type="button" onClick={() => requestStepChange(activeStep + 1)}>Próxima etapa <ChevronRight size={18}/></button>
+              : <button className="generate-briefing" type="submit" disabled={submitting}>{submitted ? <Check size={18}/> : <Send size={18}/>} {submitting ? 'Enviando briefing…' : submitted ? 'Briefing enviado com sucesso!' : 'Enviar briefing para a 4Juris'}</button>}
           </div>
           {activeStep === FORM_STEPS.length - 1 && <div className="briefing-send-feedback" aria-live="polite">{submitted && <p className="is-success"><Check size={16}/> Todos os dados foram enviados para a equipe 4Juris.</p>}{submitError && <p className="is-error"><AlertCircle size={16}/> {submitError}</p>}</div>}
         </form>
 
-        <aside className="briefing-result">
+        {activeStep === FORM_STEPS.length - 1 && <aside className="briefing-result">
           <div className="briefing-result-heading"><span><Send size={17}/></span><div><small>RESULTADO</small><h2>Seu briefing pronto</h2></div></div>
           <p>O conteúdo é atualizado enquanto você preenche e será enviado integralmente para a equipe 4Juris. Você também pode copiá-lo como backup.</p>
           <pre>{result}</pre>
           <button type="button" onClick={copyResult} disabled={!canCopy} aria-disabled={!canCopy}>{copied ? <Check size={17}/> : <Copy size={17}/>} {copied ? 'Briefing copiado!' : canCopy ? 'Copiar resultado' : `Faltam ${missingRequired.length} ${missingRequired.length === 1 ? 'campo obrigatório' : 'campos obrigatórios'}`}</button>
-        </aside>
+        </aside>}
       </div>
     </main>
   </div>
 }
 
-function Group({ title, note, children }) {
-  return <section className="client-group" aria-label={title}><h2 className="client-group-title">{title}</h2>{note && <p className="form-section-note">💡 {note}</p>}{children}</section>
+function Group({ title, note, showValidation = false, children }) {
+  return <FormValidationContext.Provider value={showValidation}><section className="client-group" aria-label={title}><h2 className="client-group-title">{title}</h2>{note && <p className="form-section-note">💡 {note}</p>}{children}</section></FormValidationContext.Provider>
 }
 
 function ConditionalFields({ title, children }) {
@@ -378,26 +426,37 @@ function ConditionalFields({ title, children }) {
 
 function Field({ icon, label, required, area, format, onChange, ...props }) {
   const Element = area ? 'textarea' : 'input'
-  const invalid = Boolean(required && !props.value?.trim())
+  const showValidation = useContext(FormValidationContext)
+  const invalid = Boolean(showValidation && required && !props.value?.trim())
   const handleChange = event => onChange(format ? { target: { name: props.name, value: format(event.target.value) } } : event)
   return <label className={`client-field ${invalid ? 'is-required-missing' : ''}`}><span><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</span><Element required={required} aria-invalid={invalid} onChange={handleChange} {...props}/></label>
 }
 
 function SelectField({ icon, label, required, options, ...props }) {
-  const invalid = Boolean(required && !props.value?.trim())
+  const showValidation = useContext(FormValidationContext)
+  const invalid = Boolean(showValidation && required && !props.value?.trim())
   return <label className={`client-field ${invalid ? 'is-required-missing' : ''}`}><span><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</span><select required={required} aria-invalid={invalid} {...props}><option value="">Selecione</option>{options.map(([value, name]) => <option value={value} key={value}>{value} — {name}</option>)}</select></label>
 }
 
 function Choice({ icon, label, required, options, name, value, onChange }) {
-  const invalid = Boolean(required && !value?.trim())
+  const showValidation = useContext(FormValidationContext)
+  const invalid = Boolean(showValidation && required && !value?.trim())
   return <fieldset className={`client-choice ${invalid ? 'is-required-missing' : ''}`}><legend><span className="field-label"><i aria-hidden="true">{icon}</i>{label}</span>{required && <b>🔴 Obrigatório</b>}</legend><div>{options.map(option => <label key={option}><input type="radio" name={name} value={option} checked={value === option} onChange={onChange} required={required} aria-invalid={invalid}/><span>{option}</span></label>)}</div></fieldset>
 }
 
-function TemplateSelector({ value, open, onToggle, onSelect }) {
-  return <section className={`template-form-selector ${value ? '' : 'is-required-missing'}`} data-field-name="template">
-    <div className="template-selector-label"><span className="field-label"><i aria-hidden="true">🖼️</i>Template de referência</span><b>🔴 Obrigatório</b></div>
-    <button className={`template-selector-trigger ${value ? 'has-value' : ''}`} type="button" onClick={onToggle} aria-expanded={open}>
-      <span>{value || 'Clique para visualizar e escolher sua referência visual'}</span><ChevronDown size={19}/>
+function TemplateSelector({ value, open, onToggle, onSelect, onSelectExistingDesign }) {
+  const showValidation = useContext(FormValidationContext)
+  const invalid = Boolean(showValidation && !value)
+  const hasExistingDesign = value === EXISTING_DESIGN_OPTION
+  return <section className={`template-form-selector ${invalid ? 'is-required-missing' : ''}`} data-field-name="template">
+    <div className="template-selector-label"><span className="field-label"><i aria-hidden="true">🖼️</i>Referência visual da LP</span><b>🔴 Obrigatório</b></div>
+    <button className={`existing-design-option ${hasExistingDesign ? 'is-selected' : ''}`} type="button" onClick={onSelectExistingDesign} aria-pressed={hasExistingDesign}>
+      <span className="existing-design-check">{hasExistingDesign ? <Check size={18}/> : '01'}</span>
+      <span><strong>Já tenho um design para a LP</strong><small>Selecione esta opção se o layout já foi definido e você já conversou com o responsável pelo atendimento.</small></span>
+    </button>
+    <div className="template-choice-separator"><span>ou escolha um dos templates disponíveis</span></div>
+    <button className={`template-selector-trigger ${value ? 'has-value' : ''}`} type="button" onClick={onToggle} aria-expanded={open} aria-invalid={invalid}>
+      <span>{hasExistingDesign ? 'Escolher um template em vez do design próprio' : value || 'Clique para visualizar e escolher sua referência visual'}</span><ChevronDown size={19}/>
     </button>
     <input className="template-selection-validation" tabIndex="-1" aria-hidden="true" required value={value} onChange={() => {}}/>
     {open && <div className="template-choice-grid">{templates.map((template, index) => <article className="template-choice-card" key={template.id}>
