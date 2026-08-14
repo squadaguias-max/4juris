@@ -328,10 +328,8 @@ ${form.hasHosting === 'Sim' ? `- Plataforma de hospedagem: ${show(form.hostingPl
           {activeStep === 0 && <Group title="🖼️ 1. Escolha do template" showValidation={validationSteps.includes(0)}>
             <div className="template-explanation">
               <span>REFERÊNCIA VISUAL</span>
-              <h3>O template define uma direção, não o resultado final.</h3>
-              <p>Os templates servem para você indicar o estilo visual que mais combina com o seu projeto. A escolha nos ajuda a compreender suas preferências de composição, organização das informações, tipografia, cores, formas e atmosfera geral da página.</p>
-              <p>O seu site <strong>não será uma cópia exata do modelo selecionado</strong>. Usaremos essa referência como ponto de partida para criar uma identidade própria, adaptada ao seu perfil profissional, à sua área de atuação, ao seu conteúdo e aos objetivos do seu negócio. Cores, imagens, textos, seções e outros elementos poderão ser ajustados ou reorganizados para que o resultado seja coerente, exclusivo e verdadeiramente personalizado.</p>
-              <p className="template-explanation-summary"><strong>Em resumo:</strong> você escolhe a direção visual que prefere, e nós a transformamos em um site único para você.</p>
+              <h3>Escolha o estilo que mais combina com sua LP.</h3>
+              <p>O template é apenas uma referência; o resultado final será personalizado para você.</p>
             </div>
             <TemplateSelector value={form.template} open={templatesOpen} onToggle={() => setTemplatesOpen(open => !open)} onSelect={selectTemplate} onSelectExistingDesign={selectExistingDesign}/>
           </Group>}
