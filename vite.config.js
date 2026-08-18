@@ -1,29 +1,19 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { createReadStream, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import contactHandler from './api/contact.js'
+import { templates } from './src/data/templates.js'
 
-const generatedArchives = [
-  ['template-13-flora-legal.zip', 'templates/template-13/template-13-flora-legal.zip'],
-  ['template-14-orbe-advocacia.zip', 'templates/template-14/template-14-orbe-advocacia.zip'],
-  ['template-15-alva-real-estate-law.zip', 'templates/template-15/template-15-alva-real-estate-law.zip'],
-]
-
-function generatedTemplateDownloads() {
+function validateTemplateDownloads() {
   return {
-    name: 'generated-template-downloads',
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const archive = generatedArchives.find(([name]) => request.url === `/downloads/${name}`)
-        if (!archive) return next()
-        response.setHeader('Content-Type', 'application/zip')
-        response.setHeader('Content-Disposition', `attachment; filename="${archive[0]}"`)
-        createReadStream(resolve(archive[1])).pipe(response)
-      })
-    },
-    generateBundle() {
-      generatedArchives.forEach(([fileName, source]) => this.emitFile({ type: 'asset', fileName: `downloads/${fileName}`, source: readFileSync(resolve(source)) }))
+    name: 'validate-template-downloads',
+    configResolved(config) {
+      const missing = templates.filter(template => !template.archive || !existsSync(resolve(config.publicDir, template.archive)))
+      if (missing.length) {
+        const labels = missing.map(template => `Template ${template.id}: ${template.archive || 'arquivo não informado'}`).join('\n')
+        throw new Error(`ZIPs de templates ausentes em public/:\n${labels}`)
+      }
     },
   }
 }
@@ -84,6 +74,6 @@ function localContactApi(environment) {
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), localContactApi(environment), generatedTemplateDownloads()],
+    plugins: [react(), localContactApi(environment), validateTemplateDownloads()],
   }
 })

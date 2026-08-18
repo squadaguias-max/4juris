@@ -52,8 +52,7 @@ const strategicTeam = strategicTeamFiles.map(file => teamAssets.find(member => m
 const erikPhoto = teamAssets.find(member => member.file === 'time_erik_navarro.webp')?.image
 const nicksonPhoto = teamAssets.find(member => member.file === 'time_nickson.webp')?.image
 const clientLogos = Object.entries(import.meta.glob('./assets/clientes/*', { eager: true, import: 'default' })).map(([path, image]) => ({ path, image, name: path.split('/').pop().replace(/^cliente_/i, '').replace(/-1|\.[^.]+$/g, '').replace(/_/g, ' ') }))
-const templateArchiveSlugs = { 1: 'avlegal', 2: 'almeida-vasconcelos', 3: 'aurea', 4: 'ferraz-saude', 5: 'lume', 6: 'aurea-dark', 7: 'civitas-advocacia', 8: 'maison-albuquerque', 9: 'nexus-law', 10: 'vertice-familia', 11: 'metodo-juridico-360', 12: 'alerta-criminal', 13: 'flora-legal', 14: 'orbe-advocacia', 15: 'alva-real-estate-law' }
-const templateArchiveUrl = template => `/downloads/template-${String(template.id).padStart(2, '0')}-${templateArchiveSlugs[template.id]}.zip`
+const templateArchiveUrl = template => `${import.meta.env.BASE_URL}${template.archive}`
 async function submitContactForm(form, formType) {
   const fields = Object.fromEntries(new FormData(form).entries())
   const response = await fetch('/api/contact', {
